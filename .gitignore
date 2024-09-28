@@ -12,3 +12,4 @@ wheels/
 *.lock
 *.pdf
 *.toml
+.DS_Store
