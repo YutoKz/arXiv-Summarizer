@@ -65,10 +65,12 @@ def main():
     response_container = st.container()
 
     with container:
-        url = st.text_input("arXiv URL", key="arxiv-url")
+        url = st.text_input("URL of Paper pdf", key="arxiv-url")
         url = fix_url(url)
         is_valid_url = validate_url(url)
-        if not is_valid_url:
+        if url == "":
+            output_text = None
+        elif not is_valid_url:
             st.warning("Please enter a valid URL")
             output_text = None
         else:                                               # URLは所定の形式
@@ -171,11 +173,11 @@ Please summarize these sentences according to the following format in markdown:
         if output_text:
             with response_container:
                 st.markdown("## Summary")
-                # コピーボタン
-                copy_button_html = f"""
-                    <button onclick="navigator.clipboard.writeText('{html.escape(output_text)}')">Copy to clipboard</button>
-                """
-                st.components.v1.html(copy_button_html, height=50)
+                ## コピーボタン
+                #copy_button_html = f"""
+                #    <button onclick="navigator.clipboard.writeText('{html.escape(output_text)}')">Copy to clipboard</button>
+                #"""
+                #st.components.v1.html(copy_button_html, height=50)
                 st.markdown(output_text)
                 #st.markdown("---")
                 #st.markdown("## Original Text")
@@ -187,3 +189,5 @@ Please summarize these sentences according to the following format in markdown:
 
 if __name__ == '__main__':
     main()
+
+
