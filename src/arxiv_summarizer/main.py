@@ -16,20 +16,21 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 from io import BytesIO
+import html
 
 
 
 def init_page():
     st.set_page_config(
-        page_title="Website Summarizer",
-        page_icon="🤗"
+        page_title="Paper Summarizer",
+        page_icon="📃"
     )
-    st.header("Website Summarizer 🤗")
+    st.header("Paper Summarizer 📃")
     st.sidebar.title("Options")
 
 def select_model():
-    model = st.sidebar.radio("Choose a model:", ("GPT-3.5", "GPT-4o mini"))
-    if model == "GPT-3.5":
+    model = st.sidebar.radio("Choose a model:", ("GPT-4o mini", "(GPT-3.5-turbo)"))
+    if model == "GPT-3.5-turbo":
         model_name = "gpt-3.5-turbo"
     else:
         model_name = "gpt-4o-mini"
@@ -110,7 +111,7 @@ Explain while paying attention to the following points in detail:
 - Discussion
 - Previous studies that serve as starting points or are cited multiple times, and thus considered important
                     
-Add an elongated dash (―) at the end of the output for distinction.
+Add "-------" at the end of the output for distinction.
                     """
 
                     collapse_template = """
@@ -126,7 +127,7 @@ Combine these explanations while paying attention to the following points:
 - Discussion
 - Previous studies that serve as starting points or are cited multiple times, and thus considered important
                     
-Add an elongated dash (―) at the end of the output for distinction.
+Add "-------" at the end of the output for distinction.
                     """
 
                     reduce_template = """
@@ -170,10 +171,16 @@ Please summarize these sentences according to the following format in markdown:
         if output_text:
             with response_container:
                 st.markdown("## Summary")
+                # コピーボタン
+                copy_button_html = f"""
+                    <button onclick="navigator.clipboard.writeText('{html.escape(output_text)}')">Copy to clipboard</button>
+                """
+                st.components.v1.html(copy_button_html, height=50)
                 st.markdown(output_text)
                 #st.markdown("---")
                 #st.markdown("## Original Text")
                 #st.write(documents)
+                
 
 
 
