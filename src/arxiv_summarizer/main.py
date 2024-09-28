@@ -37,8 +37,16 @@ def select_model():
 
     return ChatOpenAI(temperature=0, model_name=model_name)
 
-def validate_url(url):  
+def fix_url(url):
     # arxivのURLかどうかを判定, 修正可能なら修正
+    if url.startswith("https://arxiv.org/"):
+        if url.startswith("https://arxiv.org/abs/"):
+            url = url.replace("https://arxiv.org/abs/", "https://arxiv.org/pdf/")
+        elif url.startswith("https://arxiv.org/html/"):
+            url = url.replace("https://arxiv.org/html/", "https://arxiv.org/pdf/")
+    return url
+
+def validate_url(url):  
     try:
         result = urlparse(url)
         return all([result.scheme, result.netloc])
@@ -57,6 +65,7 @@ def main():
 
     with container:
         url = st.text_input("arXiv URL", key="arxiv-url")
+        url = fix_url(url)
         is_valid_url = validate_url(url)
         if not is_valid_url:
             st.warning("Please enter a valid URL")
