@@ -90,11 +90,11 @@ def main():
             #    pages.append(page)
             text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
                 model_name="gpt-3.5-turbo",
-                chunk_size=3000,
+                chunk_size=30000,
                 chunk_overlap=300,
             )
             documents = loader.load_and_split(text_splitter=text_splitter)
-            #st.write(f"len(document): {len(documents)}")
+            st.write(f"len(document): {len(documents)}")
             #st.write(f"document[0]: {documents[0]}")
 
             # LLMに入力、所定の形式へ要約
@@ -162,7 +162,7 @@ Please summarize these sentences according to the following format in markdown:
                     response = chain(
                         {
                             "input_documents": documents,
-                            "token_max": 3000,
+                            "token_max": 30000,
                         },
                         return_only_outputs=True
                     )
