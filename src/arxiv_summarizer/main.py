@@ -90,9 +90,6 @@ def page_summarizer():
             
             # PDFをDocumentに変換
             loader = PyPDFLoader(pdf_path)
-            #pages = []
-            #for page in loader.lazy_load():
-            #    pages.append(page)
             text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
                 model_name="gpt-3.5-turbo",
                 chunk_size=30000,
@@ -272,10 +269,13 @@ def page_upload_and_build_vector_db():
 
     with container_upload:
         st.markdown("#### Upload to VectorDB")
-        url = st.text_input("URL of Paper pdf", key="paper-url-for-db")
+        col_url, col_uploadButton = st.columns((5, 1), vertical_alignment="bottom")
+        with col_url:
+            url = st.text_input("URL of Paper pdf", key="paper-url-for-db")
+        with col_uploadButton:
+            upload_button = st.button("Upload", key="Upload")
         
-        if st.button("Upload", key="Upload"):
-            
+        if upload_button:
             url_list = []
             record_list = qdrant.client.scroll(
                 collection_name=COLLECTION_NAME,
@@ -299,8 +299,12 @@ def page_upload_and_build_vector_db():
 
     with container_ask:
         st.markdown("#### Ask VectorDB")
-        query = st.text_input("ASK", key="Query")
-        if st.button("Ask", key="Ask"):
+        col_query, col_askButton = st.columns((5, 1), vertical_alignment="bottom")
+        with col_query:
+            query = st.text_input("ASK", key="Query")
+        with col_askButton:
+            ask_button = st.button("Ask", key="Ask") 
+        if ask_button:
             qa = build_qa_model(llm, qdrant)
             if qa:
                 with st.spinner("ChatGPT is typing ..."):
