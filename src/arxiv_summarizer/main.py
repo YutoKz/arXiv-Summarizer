@@ -18,6 +18,15 @@ from urllib.parse import urlparse
 from io import BytesIO
 import html
 
+from PyPDF2 import PdfReader
+
+from langchain_openai import OpenAIEmbeddings
+from langchain_qdrant import QdrantVectorStore  # Qdrant
+from langchain.chains import RetrievalQA
+
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams
+
 
 
 def init_page():
@@ -54,6 +63,85 @@ def validate_url(url):
     except ValueError:
         return False
     
+# ---------------------------------
+# Upload to VectorDB
+QDRANT_PATH = "./local_qdrant"
+COLLECTION_NAME = "papers"
+
+def load_qdrant(collection_name):
+    client = QdrantClient(path=QDRANT_PATH)
+
+    # すべてのコレクション名を取得
+    collections = client.get_collections().collections
+    collection_names = [collection.name for collection in collections]
+
+    # コレクションが存在しなければ作成
+    if collection_name not in collection_names:
+        # コレクションが存在しない場合、新しく作成します
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
+        )
+        print('collection created')
+
+    #return Qdrant(
+    return QdrantVectorStore(
+        client=client,
+        collection_name=collection_name, 
+        embedding=OpenAIEmbeddings()
+    )
+
+def get_pdf_text(url):
+    url = fix_url(url)
+    is_valid_url = validate_url(url)
+    if not is_valid_url:
+        st.warning("Please enter a valid URL")
+        return None
+    else:                                               # URLは所定の形式
+        # url先のPDFを保存
+        response = requests.get(url)
+        pdf_path = "./_/downloaded_paper_for_db.pdf"
+        if response.status_code != 200:
+            st.error("Failed to download the PDF file")
+            return None
+        else:
+            with open(pdf_path, "wb") as file:
+                file.write(response.content)
+
+            pdf_reader = PdfReader(pdf_path)
+            text = '\n\n'.join([page.extract_text() for page in pdf_reader.pages])
+            text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+                model_name="gpt-3.5-turbo",
+                # 適切な chunk size は質問対象のPDFによって変わるため調整が必要
+                # 大きくしすぎると質問回答時に色々な箇所の情報を参照することができない
+                # 逆に小さすぎると一つのchunkに十分なサイズの文脈が入らない
+                chunk_size=1000,
+                chunk_overlap=0,
+            )
+            return text_splitter.split_text(text)
+    
+
+def page_upload_and_build_vector_db():
+    st.title("VectorDB")
+    qdrant = load_qdrant(collection_name=COLLECTION_NAME)
+
+    container = st.container()
+    
+    url = st.text_input("URL of Paper pdf", key="paper-url-for-db")
+
+    with container:
+        st.markdown("### Upload")
+        pdf_text = get_pdf_text()
+        
+        if not pdf_text:
+            st.warning("Upload Syllabus")
+        else:    
+            with st.spinner("Loading ..."):
+                qdrant.add_texts(pdf_text, metadatas=[{"type": "Paper", "url": url}])
+                    
+          
+
+
 # ----------------------------------------------------------------------------
 
 def main():
