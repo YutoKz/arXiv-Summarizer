@@ -11,6 +11,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.prompts import PromptTemplate
 from langchain.chains.summarize.chain import load_summarize_chain
 from langchain_community.llms import OpenAI
+from langchain.docstore.document import Document
 
 import requests
 from bs4 import BeautifulSoup
@@ -70,6 +71,7 @@ def page_summarizer():
     response_container = st.container()
 
     with container:
+        st.markdown("#### Summarize Paper")
         url = st.text_input("URL of Paper pdf", key="arxiv-url")
         url = fix_url(url)
         is_valid_url = validate_url(url)
@@ -89,15 +91,25 @@ def page_summarizer():
                 st.error("Failed to download the PDF file")
             
             # PDFをDocumentに変換
-            loader = PyPDFLoader(pdf_path)
+                #loader = PyPDFLoader(pdf_path)
+                #text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+                #    model_name="gpt-3.5-turbo",
+                #    chunk_size=30000,
+                #    chunk_overlap=300,
+                #)
+                #documents = loader.load_and_split(text_splitter=text_splitter)    # load_and_split は非推奨
+            reader = PdfReader(pdf_path)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text()
             text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
                 model_name="gpt-3.5-turbo",
                 chunk_size=30000,
                 chunk_overlap=300,
             )
-            documents = loader.load_and_split(text_splitter=text_splitter)
+            pdf_text = text_splitter.split_text(text)  # List
+            documents = [Document(page_content=text) for text in pdf_text]
             st.write(f"len(document): {len(documents)}")
-            #st.write(f"document[0]: {documents[0]}")
 
             # LLMに入力、所定の形式へ要約
             if documents:
@@ -175,15 +187,7 @@ Please summarize these sentences according to the following format in markdown:
         if output_text:
             with response_container:
                 st.markdown("## Summary")
-                ## コピーボタン
-                #copy_button_html = f"""
-                #    <button onclick="navigator.clipboard.writeText('{html.escape(output_text)}')">Copy to clipboard</button>
-                #"""
-                #st.components.v1.html(copy_button_html, height=50)
                 st.markdown(output_text)
-                #st.markdown("---")
-                #st.markdown("## Original Text")
-                #st.write(documents)
     
 # ---------------------------------
 # Upload to VectorDB
@@ -285,14 +289,15 @@ def page_upload_and_build_vector_db():
 
             for record in record_list[0]:
                 # メタデータの特定のフィールドを抽出
-                metadata_value = record.payload["metadata"]["url"]
-                url_list.append(metadata_value)
+                if "source" in record.payload["metadata"]:
+                    metadata_value = record.payload["metadata"]["source"]
+                    url_list.append(metadata_value)
 
             if not url in set(url_list):
                 pdf_text = get_pdf_text(url=url)
                 if pdf_text:
                     with st.spinner("Loading ..."):
-                        qdrant.add_texts(pdf_text, metadatas=[{"type": "Paper", "url": url} for _ in pdf_text])
+                        qdrant.add_texts(pdf_text, metadatas=[{"type": "Paper", "source": url} for _ in pdf_text])
                     st.success("The paper is uploaded to VectorDB")
             else:
                 st.warning("The paper is already uploaded")
