@@ -62,93 +62,10 @@ def validate_url(url):
         return all([result.scheme, result.netloc])
     except ValueError:
         return False
-    
-# ---------------------------------
-# Upload to VectorDB
-QDRANT_PATH = "./local_qdrant"
-COLLECTION_NAME = "papers"
 
-def load_qdrant(collection_name):
-    client = QdrantClient(path=QDRANT_PATH)
-
-    # すべてのコレクション名を取得
-    collections = client.get_collections().collections
-    collection_names = [collection.name for collection in collections]
-
-    # コレクションが存在しなければ作成
-    if collection_name not in collection_names:
-        # コレクションが存在しない場合、新しく作成します
-        client.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
-        )
-        print('collection created')
-
-    #return Qdrant(
-    return QdrantVectorStore(
-        client=client,
-        collection_name=collection_name, 
-        embedding=OpenAIEmbeddings()
-    )
-
-def get_pdf_text(url):
-    url = fix_url(url)
-    is_valid_url = validate_url(url)
-    if not is_valid_url:
-        st.warning("Please enter a valid URL")
-        return None
-    else:                                               # URLは所定の形式
-        # url先のPDFを保存
-        response = requests.get(url)
-        pdf_path = "./_/downloaded_paper_for_db.pdf"
-        if response.status_code != 200:
-            st.error("Failed to download the PDF file")
-            return None
-        else:
-            with open(pdf_path, "wb") as file:
-                file.write(response.content)
-
-            pdf_reader = PdfReader(pdf_path)
-            text = '\n\n'.join([page.extract_text() for page in pdf_reader.pages])
-            text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-                model_name="gpt-3.5-turbo",
-                # 適切な chunk size は質問対象のPDFによって変わるため調整が必要
-                # 大きくしすぎると質問回答時に色々な箇所の情報を参照することができない
-                # 逆に小さすぎると一つのchunkに十分なサイズの文脈が入らない
-                chunk_size=1000,
-                chunk_overlap=0,
-            )
-            return text_splitter.split_text(text)
-    
-
-def page_upload_and_build_vector_db():
-    st.title("VectorDB")
-    qdrant = load_qdrant(collection_name=COLLECTION_NAME)
-
-    container = st.container()
-    
-    url = st.text_input("URL of Paper pdf", key="paper-url-for-db")
-
-    with container:
-        st.markdown("### Upload")
-        pdf_text = get_pdf_text()
-        
-        if not pdf_text:
-            st.warning("Upload Syllabus")
-        else:    
-            with st.spinner("Loading ..."):
-                qdrant.add_texts(pdf_text, metadatas=[{"type": "Paper", "url": url}])
-                    
-          
-
-
-# ----------------------------------------------------------------------------
-
-def main():
-    init_page()
-
+def page_summarizer():
     llm = select_model()
-
+    
     container = st.container()
     response_container = st.container()
 
@@ -270,6 +187,141 @@ Please summarize these sentences according to the following format in markdown:
                 #st.markdown("---")
                 #st.markdown("## Original Text")
                 #st.write(documents)
+    
+# ---------------------------------
+# Upload to VectorDB
+QDRANT_PATH = "./local_qdrant"
+COLLECTION_NAME = "papers"
+
+def load_qdrant(collection_name):
+    client = QdrantClient(path=QDRANT_PATH)
+
+    # すべてのコレクション名を取得
+    collections = client.get_collections().collections
+    collection_names = [collection.name for collection in collections]
+
+    # コレクションが存在しなければ作成
+    if collection_name not in collection_names:
+        # コレクションが存在しない場合、新しく作成します
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
+        )
+        print('collection created')
+
+    #return Qdrant(
+    return QdrantVectorStore(
+        client=client,
+        collection_name=collection_name, 
+        embedding=OpenAIEmbeddings()
+    )
+
+def get_pdf_text(url):
+    url = fix_url(url)
+    is_valid_url = validate_url(url)
+    if url == "":
+        return None
+    elif not is_valid_url:
+        st.warning("Please enter a valid URL")
+        return None
+    else:                                               # URLは所定の形式
+        # url先のPDFを保存
+        response = requests.get(url)
+        pdf_path = "./_/downloaded_paper_for_db.pdf"
+        if response.status_code != 200:
+            st.error("Failed to download the PDF file")
+            return None
+        else:
+            with open(pdf_path, "wb") as file:
+                file.write(response.content)
+
+            pdf_reader = PdfReader(pdf_path)
+            text = '\n\n'.join([page.extract_text() for page in pdf_reader.pages])
+            text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+                model_name="gpt-3.5-turbo",
+                # 適切な chunk size は質問対象のPDFによって変わるため調整が必要
+                # 大きくしすぎると質問回答時に色々な箇所の情報を参照することができない
+                # 逆に小さすぎると一つのchunkに十分なサイズの文脈が入らない
+                chunk_size=1000,
+                chunk_overlap=0,
+            )
+            return text_splitter.split_text(text)
+
+def build_qa_model(llm):
+    qdrant = load_qdrant(collection_name=COLLECTION_NAME)
+    retriever = qdrant.as_retriever(
+        # "mmr",  "similarity_score_threshold" などもある
+        search_type="similarity",
+        # 文書を何個取得するか (default: 4)
+        search_kwargs={"k":10}
+    )
+    return RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff", 
+        retriever=retriever,
+        return_source_documents=True,
+        verbose=True
+    )
+
+def page_upload_and_build_vector_db():
+    llm = select_model()
+    qdrant = load_qdrant(collection_name=COLLECTION_NAME)
+
+    container_upload = st.container()
+    container_ask = st.container()
+    
+
+    with container_upload:
+        st.markdown("#### Upload to VectorDB")
+        url = st.text_input("URL of Paper pdf", key="paper-url-for-db")
+        
+        url_list = []
+        record_list = qdrant.client.scroll(
+            collection_name=COLLECTION_NAME,
+            with_payload=True,  # メタデータを取得
+            limit=1000,
+        )
+
+        for record in record_list[0]:
+            # メタデータの特定のフィールドを抽出
+            metadata_value = record.payload["metadata"]["url"]
+            url_list.append(metadata_value)
+
+        if not url in set(url_list):
+            pdf_text = get_pdf_text(url=url)
+            if pdf_text:
+                with st.spinner("Loading ..."):
+                    qdrant.add_texts(pdf_text, metadatas=[{"type": "Paper", "url": url} for _ in pdf_text])
+                st.success("The paper is uploaded to VectorDB")
+        else:
+            st.warning("The paper is already uploaded")
+
+    with container_ask:
+        st.markdown("#### Ask VectorDB")
+        if query := st.text_input("ASK", key="Query"):
+            qa = build_qa_model(llm)
+            if qa:
+                with st.spinner("ChatGPT is typing ..."):
+                    answer = qa(query)
+                st.write(answer)
+            else:
+                answer = None
+          
+
+
+# ----------------------------------------------------------------------------
+
+def main():
+    init_page()
+
+    selection_admin = st.sidebar.radio("Select", ["Summarize", "VectorDB"])
+
+    if selection_admin == "VectorDB":
+        page_upload_and_build_vector_db()
+    elif selection_admin == "Summarize":
+        page_summarizer()
+
+    
                 
 
 
