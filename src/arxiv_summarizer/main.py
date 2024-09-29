@@ -247,8 +247,7 @@ def get_pdf_text(url):
             )
             return text_splitter.split_text(text)
 
-def build_qa_model(llm):
-    qdrant = load_qdrant(collection_name=COLLECTION_NAME)
+def build_qa_model(llm, qdrant):
     retriever = qdrant.as_retriever(
         # "mmr",  "similarity_score_threshold" などもある
         search_type="similarity",
@@ -265,7 +264,7 @@ def build_qa_model(llm):
 
 def page_upload_and_build_vector_db():
     llm = select_model()
-    qdrant = load_qdrant(collection_name=COLLECTION_NAME)
+    qdrant = load_qdrant(collection_name=COLLECTION_NAME)    
 
     container_upload = st.container()
     container_ask = st.container()
@@ -275,35 +274,39 @@ def page_upload_and_build_vector_db():
         st.markdown("#### Upload to VectorDB")
         url = st.text_input("URL of Paper pdf", key="paper-url-for-db")
         
-        url_list = []
-        record_list = qdrant.client.scroll(
-            collection_name=COLLECTION_NAME,
-            with_payload=True,  # メタデータを取得
-            limit=1000,
-        )
+        if st.button("Upload", key="Upload"):
+            
+            url_list = []
+            record_list = qdrant.client.scroll(
+                collection_name=COLLECTION_NAME,
+                with_payload=True,  # メタデータを取得
+                limit=1000,
+            )
 
-        for record in record_list[0]:
-            # メタデータの特定のフィールドを抽出
-            metadata_value = record.payload["metadata"]["url"]
-            url_list.append(metadata_value)
+            for record in record_list[0]:
+                # メタデータの特定のフィールドを抽出
+                metadata_value = record.payload["metadata"]["url"]
+                url_list.append(metadata_value)
 
-        if not url in set(url_list):
-            pdf_text = get_pdf_text(url=url)
-            if pdf_text:
-                with st.spinner("Loading ..."):
-                    qdrant.add_texts(pdf_text, metadatas=[{"type": "Paper", "url": url} for _ in pdf_text])
-                st.success("The paper is uploaded to VectorDB")
-        else:
-            st.warning("The paper is already uploaded")
+            if not url in set(url_list):
+                pdf_text = get_pdf_text(url=url)
+                if pdf_text:
+                    with st.spinner("Loading ..."):
+                        qdrant.add_texts(pdf_text, metadatas=[{"type": "Paper", "url": url} for _ in pdf_text])
+                    st.success("The paper is uploaded to VectorDB")
+            else:
+                st.warning("The paper is already uploaded")
 
     with container_ask:
         st.markdown("#### Ask VectorDB")
-        if query := st.text_input("ASK", key="Query"):
-            qa = build_qa_model(llm)
+        query = st.text_input("ASK", key="Query")
+        if st.button("Ask", key="Ask"):
+            qa = build_qa_model(llm, qdrant)
             if qa:
                 with st.spinner("ChatGPT is typing ..."):
                     answer = qa(query)
-                st.write(answer)
+                st.write(answer["result"])
+                st.write(answer["source_documents"])
             else:
                 answer = None
           
