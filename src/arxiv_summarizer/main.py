@@ -104,7 +104,7 @@ def page_summarizer():
                 text += page.extract_text()
             text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
                 model_name="gpt-3.5-turbo",
-                chunk_size=30000,
+                chunk_size=60000,
                 chunk_overlap=300,
             )
             pdf_text = text_splitter.split_text(text)  # List
@@ -176,7 +176,7 @@ Please summarize these sentences according to the following format in markdown:
                     response = chain(
                         {
                             "input_documents": documents,
-                            "token_max": 30000,
+                            "token_max": 60000,
                         },
                         return_only_outputs=True
                     )
